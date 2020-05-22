@@ -1,24 +1,19 @@
 import contextlib
 import os
 import os.path
-import joblib as jl
-import toolz as t
 import shutil
-from s3fs import S3FileSystem
 import tempfile
-from joblib.disk import mkdirp, rm_subdirs
-from .serializers import DEFAULT_VALUE_SERIALIZER, DEFAULT_INPUT_SERIALIZER
+
+from joblib.disk import mkdirp
+from s3fs import S3FileSystem
+
 from . import _commonstore as cs
+from .serializers import DEFAULT_VALUE_SERIALIZER
 
 
 class BaseBlobStore:
     def __init__(
-        self,
-        read=True,
-        write=True,
-        read_through_write=True,
-        delete=False,
-        on_duplicate_key="skip",
+        self, read=True, write=True, read_through_write=True, delete=False, on_duplicate_key='skip',
     ):
         self._read = read
         self._write = write
@@ -26,16 +21,16 @@ class BaseBlobStore:
         self._delete = delete
         self._on_duplicate_key = on_duplicate_key
 
-        valid_on_duplicate_keys = {"skip", "overwrite", "check_collision", "raise"}
+        valid_on_duplicate_keys = {'skip', 'overwrite', 'check_collision', 'raise'}
         if self._on_duplicate_key not in valid_on_duplicate_keys:
-            msg = "on_duplicate_key must be one of {}".format(valid_on_duplicate_keys)
+            msg = 'on_duplicate_key must be one of {}'.format(valid_on_duplicate_keys)
             raise RuntimeError(msg)
 
     def __getitem__(self, id, *args, **kargs):
         return self.get(id, *args, **kargs)
 
     def put(self, id, value, serializer=DEFAULT_VALUE_SERIALIZER, read_through=False):
-        method = getattr(self, "_put_" + self._on_duplicate_key)
+        method = getattr(self, '_put_' + self._on_duplicate_key)
         return method(id, value, serializer, read_through)
 
     def _put_raise(self, id, value, serializer, read_through):
@@ -58,7 +53,7 @@ class BaseBlobStore:
     # deserializing the old value and running the hash algorithm
     # with an alternate hash
     def _check_collision(self, id, value, serializer):
-        raise NotImplemented()
+        raise NotImplementedError()
 
 
 class MemoryStore(BaseBlobStore):
@@ -69,7 +64,7 @@ class MemoryStore(BaseBlobStore):
         write=True,
         read_through_write=True,
         delete=True,
-        on_duplicate_key="skip",
+        on_duplicate_key='skip',
     ):
         super(MemoryStore, self).__init__(
             read=read,
@@ -104,7 +99,7 @@ class MemoryStore(BaseBlobStore):
 @contextlib.contextmanager
 def _temp_filename():
     try:
-        temp = tempfile.NamedTemporaryFile("wb", delete=False)
+        temp = tempfile.NamedTemporaryFile('wb', delete=False)
         temp.close()
         yield temp.name
     finally:
@@ -131,7 +126,7 @@ class DiskStore(BaseBlobStore):
         write=True,
         read_through_write=True,
         delete=False,
-        on_duplicate_key="skip",
+        on_duplicate_key='skip',
     ):
         super(DiskStore, self).__init__(
             read=read,
@@ -174,7 +169,7 @@ class RemoteStore(BaseBlobStore):
         write=True,
         read_through_write=True,
         delete=False,
-        on_duplicate_key="skip",
+        on_duplicate_key='skip',
         cleanup_cachedir=False,
         always_check_remote=False,
     ):
@@ -271,7 +266,7 @@ class S3Store(RemoteStore):
         write=True,
         read_through_write=True,
         delete=False,
-        on_duplicate_key="skip",
+        on_duplicate_key='skip',
         cleanup_cachedir=False,
         always_check_remote=False,
     ):
@@ -303,7 +298,7 @@ class S3Store(RemoteStore):
         elif s3_config is not None:
             self.s3fs = S3FileSystem(**s3_config)
         else:
-            raise ValueError("You must provide either s3_config or s3fs for a S3Store")
+            raise ValueError('You must provide either s3_config or s3fs for a S3Store')
 
     def _exists(self, path):
         return self.s3fs.exists(path)
@@ -326,7 +321,7 @@ class ChainedStore(BaseBlobStore):
         write=True,
         read_through_write=True,
         delete=True,
-        on_duplicate_key="skip",
+        on_duplicate_key='skip',
     ):
         super(ChainedStore, self).__init__(
             read=read,

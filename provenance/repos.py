@@ -11,40 +11,34 @@ from datetime import datetime
 import numpy as np
 import psutil
 import sqlalchemy
-from sqlalchemy.schema import CreateSchema
-import sqlalchemy.sql as sa
 import sqlalchemy.dialects.postgresql as pg
 import sqlalchemy.orm
+import sqlalchemy.sql as sa
+import sqlalchemy_utils.functions as sql_utils
 import toolz as t
 import wrapt
 from alembic import command
 from alembic.config import Config as AlembicConfig
-from alembic import context as alembic_context
 from alembic.migration import MigrationContext
-
-import sqlalchemy_utils.functions as sql_utils
 from memoized_property import memoized_property
+from sqlalchemy.schema import CreateSchema
 
-from . import _commonstore as cs
+from . import _commonstore as cs, models as db, serializers as s, utils
 from ._commonstore import find_first
-from . import models as db
-from . import models
-from . import serializers as s
-from . import utils
 from .compatibility import string_type
 from .hashing import hash, value_repr
 
 
 def _host_info():
     return {
-        "machine": platform.machine(),
-        "nodename": platform.node(),
-        "platform": platform.platform(),
-        "processor": platform.processor(),
-        "cpu_count": multiprocessing.cpu_count(),
-        "release": platform.release(),
-        "system": platform.system(),
-        "version": platform.version(),
+        'machine': platform.machine(),
+        'nodename': platform.node(),
+        'platform': platform.platform(),
+        'processor': platform.processor(),
+        'cpu_count': multiprocessing.cpu_count(),
+        'release': platform.release(),
+        'system': platform.system(),
+        'version': platform.version(),
     }
 
 
@@ -52,20 +46,20 @@ def _process_info():
     pid = os.getpid()
     p = psutil.Process(pid)
     return {
-        "cmdline": p.cmdline(),
-        "cwd": p.cwd(),
-        "exe": p.exe(),
-        "name": p.name(),
-        "num_fds": p.num_fds(),
-        "num_threads": p.num_threads(),
+        'cmdline': p.cmdline(),
+        'cwd': p.cwd(),
+        'exe': p.exe(),
+        'name': p.name(),
+        'num_fds': p.num_fds(),
+        'num_threads': p.num_threads(),
     }
 
 
 def _alembic_config(connection):
     root = t.pipe(__file__, os.path.realpath, os.path.dirname)
-    config = AlembicConfig(os.path.join(root, "alembic.ini"))
-    config.set_main_option("script_location", os.path.join(root, "migrations"))
-    config.attributes["connection"] = connection
+    config = AlembicConfig(os.path.join(root, 'alembic.ini'))
+    config.set_main_option('script_location', os.path.join(root, 'migrations'))
+    config.attributes['connection'] = connection
     return config
 
 
@@ -120,13 +114,9 @@ class Config:
     def run_info(self):
         if self._run_info is None:
             run_info = self.run_info_fn(
-                {
-                    "host": _host_info(),
-                    "process": _process_info(),
-                    "created_at": datetime.utcnow(),
-                }
+                {'host': _host_info(), 'process': _process_info(), 'created_at': datetime.utcnow()}
             )
-            run_info["id"] = hash(run_info)
+            run_info['id'] = hash(run_info)
             self._run_info = run_info
         return self._run_info
 
@@ -262,12 +252,12 @@ def load_set_by_name(set_name):
     load_set_by_id
     load_set_by_labels
     """
-    return get_default_repo().get_set_by_labels({"name": set_name})
+    return get_default_repo().get_set_by_labels({'name': set_name})
 
 
 def _check_labels_name(labels):
     if isinstance(labels, str):
-        return {"name": labels}
+        return {'name': labels}
     return labels
 
 
@@ -332,9 +322,7 @@ class ArtifactProxy(wrapt.ObjectProxy, Proxy):
         return self._self_artifact
 
     def __repr__(self):
-        return "<provenance.ArtifactProxy({}) {} >".format(
-            self.artifact.id, repr(self.__wrapped__)
-        )
+        return '<provenance.ArtifactProxy({}) {} >'.format(self.artifact.id, repr(self.__wrapped__))
 
     def __reduce__(self):
         return (load_proxy, (self.artifact.id,))
@@ -359,9 +347,7 @@ class CallableArtifactProxy(wrapt.CallableObjectProxy, Proxy):
         return self._self_artifact
 
     def __repr__(self):
-        return "<provenance.ArtifactProxy({}) {} >".format(
-            self.artifact.id, repr(self.__wrapped__)
-        )
+        return '<provenance.ArtifactProxy({}) {} >'.format(self.artifact.id, repr(self.__wrapped__))
 
     def __reduce__(self):
         return (load_proxy, (self.artifact.id,))
@@ -373,9 +359,7 @@ class CallableArtifactProxy(wrapt.CallableObjectProxy, Proxy):
         return CallableArtifactProxy(copy.copy(self.__wrapped__), self._self_artifact)
 
     def __deepcopy__(self, memo=None):
-        return CallableArtifactProxy(
-            copy.deepcopy(self.__wrapped__, memo), self._self_artifact
-        )
+        return CallableArtifactProxy(copy.deepcopy(self.__wrapped__, memo), self._self_artifact)
 
 
 def artifact_proxy(value, artifact):
@@ -389,13 +373,13 @@ def is_proxy(obj):
 
 
 class Artifact:
-    def __init__(self, repo, props, value="not provided", inputs=None, run_info=None):
-        assert "id" in props, "props must contain 'id'"
-        assert "value_id" in props, "props must contain 'value_id'"
+    def __init__(self, repo, props, value='not provided', inputs=None, run_info=None):
+        assert 'id' in props, "props must contain 'id'"
+        assert 'value_id' in props, "props must contain 'value_id'"
         self.__dict__ = props.copy()
         self.repo = repo
 
-        if not isinstance(value, str) or value != "not provided":
+        if not isinstance(value, str) or value != 'not provided':
             self._value = value
         if inputs is not None:
             self._inputs = inputs
@@ -417,7 +401,7 @@ class Artifact:
     @property
     def tags(self):
         if self.custom_fields:
-            return self.custom_fields.get("tags", None)
+            return self.custom_fields.get('tags', None)
 
     def proxy(self):
         if self.composite:
@@ -435,10 +419,10 @@ class Artifact:
         return not self.__eq__(other)
 
     def __hash__(self):
-        return hash(("--artifact--", self.id))
+        return hash(('--artifact--', self.id))
 
     def __repr__(self):
-        return "<provenance.Artifact({})>".format(self.id)
+        return '<provenance.Artifact({})>'.format(self.id)
 
     def __reduce__(self):
         return (load_artifact, (self.id,))
@@ -446,17 +430,17 @@ class Artifact:
 
 @value_repr.register(Artifact)
 def _(artifact):
-    return ("artifact", artifact.id)
+    return ('artifact', artifact.id)
 
 
 def _artifact_id(artifact_or_id):
     if isinstance(artifact_or_id, string_type):
         return artifact_or_id
-    if hasattr(artifact_or_id, "id"):
+    if hasattr(artifact_or_id, 'id'):
         return artifact_or_id.id
-    if hasattr(artifact_or_id, "artifact"):
+    if hasattr(artifact_or_id, 'artifact'):
         return artifact_or_id.artifact.id
-    raise Exception("Unable to coerce into an artifact id: {}".format(artifact_or_id))
+    raise Exception('Unable to coerce into an artifact id: {}'.format(artifact_or_id))
 
 
 def _artifact_from_record(repo, record):
@@ -464,7 +448,7 @@ def _artifact_from_record(repo, record):
         return record
     return Artifact(
         repo,
-        t.dissoc(record._asdict(), "value", "inputs", "run_info"),
+        t.dissoc(record._asdict(), 'value', 'inputs', 'run_info'),
         value=record.value,
         inputs=record.inputs,
         run_info=record.run_info,
@@ -488,12 +472,7 @@ class ArtifactRepository:
 
 class MemoryRepo(ArtifactRepository):
     def __init__(
-        self,
-        artifacts=None,
-        read=True,
-        write=True,
-        read_through_write=True,
-        delete=True,
+        self, artifacts=None, read=True, write=True, read_through_write=True, delete=True,
     ):
         super(MemoryRepo, self).__init__(
             read=read, write=write, read_through_write=read_through_write, delete=delete
@@ -569,7 +548,7 @@ class MemoryRepo(ArtifactRepository):
         return sorted(versions, key=lambda s: s.created_at, reverse=True)[0]
 
     def put_set(self, artifact_set, read_through=False):
-        cs.ensure_write(self, "put_set")
+        cs.ensure_write(self, 'put_set')
         self.sets.append(artifact_set)
         return artifact_set
 
@@ -583,20 +562,20 @@ class MemoryRepo(ArtifactRepository):
 
 def _transform(val):
     if isinstance(val, (Artifact)):
-        return {"id": val.id, "type": "Artifact", "name": val.name}
+        return {'id': val.id, 'type': 'Artifact', 'name': val.name}
     elif type(val) in {ArtifactProxy, CallableArtifactProxy}:
         return {
-            "id": val.artifact.id,
-            "type": "ArtifactProxy",
-            "name": val.artifact.name,
+            'id': val.artifact.id,
+            'type': 'ArtifactProxy',
+            'name': val.artifact.name,
         }
     else:
         return val
 
 
 def _inputs_json(inputs):
-    expanded = t.valmap(_transform, inputs["kargs"])
-    expanded["__varargs"] = list(t.map(_transform, inputs["varargs"]))
+    expanded = t.valmap(_transform, inputs['kargs'])
+    expanded['__varargs'] = list(t.map(_transform, inputs['varargs']))
 
     return expanded
 
@@ -640,23 +619,23 @@ def _ping_postgres(conn, branch):
 
 
 def _record_pid(dbapi_connection, connection_record):
-    connection_record.info["pid"] = os.getpid()
+    connection_record.info['pid'] = os.getpid()
 
 
 def _check_pid(dbapi_connection, connection_record, connection_proxy):
     pid = os.getpid()
-    if connection_record.info["pid"] != pid:
+    if connection_record.info['pid'] != pid:
         connection_record.connection = connection_proxy.connection = None
         raise sqlalchemy.exc.DisconnectionError(
-            "Connection record belongs to pid %s, "
-            "attempting to check out in pid %s" % (connection_record.info["pid"], pid)
+            'Connection record belongs to pid %s, '
+            'attempting to check out in pid %s' % (connection_record.info['pid'], pid)
         )
 
 
 @t.curry
 def _set_search_path(schema, dbapi_connection, connection_record, connection_proxy):
     cursor = dbapi_connection.cursor()
-    cursor.execute("SET search_path TO {};".format(schema))
+    cursor.execute('SET search_path TO {};'.format(schema))
     dbapi_connection.commit()
     cursor.close()
 
@@ -666,11 +645,11 @@ def _db_engine(conn_string, schema, persistent_connections=True):
     db_engine = sqlalchemy.create_engine(
         conn_string, json_serializer=Encoder().encode, poolclass=poolclass
     )
-    sqlalchemy.event.listens_for(db_engine, "engine_connect")(_ping_postgres)
-    sqlalchemy.event.listens_for(db_engine, "connect")(_record_pid)
-    sqlalchemy.event.listens_for(db_engine, "checkout")(_check_pid)
+    sqlalchemy.event.listens_for(db_engine, 'engine_connect')(_ping_postgres)
+    sqlalchemy.event.listens_for(db_engine, 'connect')(_record_pid)
+    sqlalchemy.event.listens_for(db_engine, 'checkout')(_check_pid)
     if schema:
-        sqlalchemy.event.listens_for(db_engine, "checkout")(_set_search_path(schema))
+        sqlalchemy.event.listens_for(db_engine, 'checkout')(_set_search_path(schema))
     return db_engine
 
 
@@ -682,7 +661,7 @@ VALUES
 {}
 ON CONFLICT DO NOTHING
     """.strip().format(
-        ",\n".join(t.map(str, pairs))
+        ',\n'.join(t.map(str, pairs))
     )
 
 
@@ -708,8 +687,8 @@ class Encoder(json.JSONEncoder):
         else:
             try:
                 return super(Encoder, self).default(val)
-            except Exception as e:
-                print("Could not serialize type: {}".format(type(val)))
+            except Exception:
+                print('Could not serialize type: {}'.format(type(val)))
                 return str(type(val))
 
 
@@ -735,7 +714,7 @@ class PostgresRepo(ArtifactRepository):
         )
 
         if not isinstance(db, string_type) and schema is not None:
-            raise ValueError("You can only provide a schema with a DB url.")
+            raise ValueError('You can only provide a schema with a DB url.')
 
         init_db = False
         if create_db and isinstance(db, string_type):
@@ -756,9 +735,9 @@ class PostgresRepo(ArtifactRepository):
         if create_schema and schema is not None:
             with self.session() as session:
                 q = sa.exists(
-                    sa.select([sa.text("schema_name")])
-                    .select_from(sa.text("information_schema.schemata"))
-                    .where(sa.text("schema_name = :schema").bindparams(schema=schema))
+                    sa.select([sa.text('schema_name')])
+                    .select_from(sa.text('information_schema.schemata'))
+                    .where(sa.text('schema_name = :schema').bindparams(schema=schema))
                 )
                 if not session.query(q).scalar():
                     session.execute(CreateSchema(schema))
@@ -776,7 +755,7 @@ class PostgresRepo(ArtifactRepository):
 
     @contextmanager
     def session(self):
-        if hasattr(self, "_session"):
+        if hasattr(self, '_session'):
             close = False
         else:
             self._session = self._sessionmaker()
@@ -796,20 +775,18 @@ class PostgresRepo(ArtifactRepository):
         cs.ensure_contains(self)
         artifact_id = _artifact_id(artifact_or_id)
         with self.session() as s:
-            return (
-                s.query(db.Artifact).filter(db.Artifact.id == artifact_id).count() > 0
-            )
+            return s.query(db.Artifact).filter(db.Artifact.id == artifact_id).count() > 0
 
     def _upsert_run(self, session, info):
         sql = (
             pg.insert(db.Run)
             .values(
-                id=info["id"],
+                id=info['id'],
                 info=info,
-                hostname=info["host"]["nodename"],
-                created_at=info["created_at"],
+                hostname=info['host']['nodename'],
+                created_at=info['created_at'],
             )
-            .on_conflict_do_nothing(index_elements=["id"])
+            .on_conflict_do_nothing(index_elements=['id'])
         )
 
         session.execute(sql)
@@ -829,13 +806,13 @@ class PostgresRepo(ArtifactRepository):
             # the below doesn't work for some reason
             # db.Base.metadata.create_all(conn)
             cfg = _alembic_config(conn)
-            command.stamp(cfg, "head")
+            command.stamp(cfg, 'head')
 
     def _db_upgrade(self):
         with self.session() as session:
             conn = session.connection()
             cfg = _alembic_config(conn)
-            command.upgrade(cfg, "head")
+            command.upgrade(cfg, 'head')
 
     def put(self, artifact_record, read_through=False):
         with self.session() as session:
@@ -844,9 +821,7 @@ class PostgresRepo(ArtifactRepository):
                 artifact_record.id, artifact_record.inputs, s.DEFAULT_INPUT_SERIALIZER
             )
             self.blobstore.put(
-                artifact_record.value_id,
-                artifact_record.value,
-                s.serializer(artifact_record),
+                artifact_record.value_id, artifact_record.value, s.serializer(artifact_record),
             )
 
             inputs_json = _inputs_json(artifact_record.inputs)
@@ -861,9 +836,7 @@ class PostgresRepo(ArtifactRepository):
     def get_by_id(self, artifact_id):
         cs.ensure_read(self)
         with self.session() as session:
-            result = (
-                session.query(db.Artifact).filter(db.Artifact.id == artifact_id).first()
-            )
+            result = session.query(db.Artifact).filter(db.Artifact.id == artifact_id).first()
 
         if result:
             return Artifact(self, result.props)
@@ -873,11 +846,7 @@ class PostgresRepo(ArtifactRepository):
     def batch_get_by_id(self, artifact_ids):
         cs.ensure_read(self)
         with self.session() as session:
-            results = (
-                session.query(db.Artifact)
-                .filter(db.Artifact.id.in_(artifact_ids))
-                .all()
-            )
+            results = session.query(db.Artifact).filter(db.Artifact.id.in_(artifact_ids)).all()
 
         if len(results) == len(artifact_ids):
             return [Artifact(self, result.props) for result in results]
@@ -890,11 +859,7 @@ class PostgresRepo(ArtifactRepository):
     def get_by_value_id(self, value_id):
         cs.ensure_read(self)
         with self.session() as session:
-            result = (
-                session.query(db.Artifact)
-                .filter(db.Artifact.value_id == value_id)
-                .first()
-            )
+            result = session.query(db.Artifact).filter(db.Artifact.value_id == value_id).first()
 
         if result:
             return Artifact(self, result.props)
@@ -920,7 +885,7 @@ class PostgresRepo(ArtifactRepository):
 
     def put_set(self, artifact_set, read_through=False):
         with self.session() as session:
-            cs.ensure_write(self, "put_set")
+            cs.ensure_write(self, 'put_set')
             db_set = db.ArtifactSet(artifact_set)
             session.add(db_set)
             session.execute(_insert_set_members_sql(artifact_set))
@@ -936,17 +901,12 @@ class PostgresRepo(ArtifactRepository):
                 .all()
             )
             props = result.props
-            props["artifact_ids"] = [m.artifact_id for m in members]
+            props['artifact_ids'] = [m.artifact_id for m in members]
             return ArtifactSet(**props)
 
     def contains_set(self, set_id):
         with self.session() as session:
-            if (
-                session.query(db.ArtifactSet)
-                .filter(db.ArtifactSet.set_id == set_id)
-                .count()
-                > 0
-            ):
+            if session.query(db.ArtifactSet).filter(db.ArtifactSet.set_id == set_id).count() > 0:
                 return True
             else:
                 return False
@@ -954,11 +914,7 @@ class PostgresRepo(ArtifactRepository):
     def get_set_by_id(self, set_id):
         cs.ensure_read(self)
         with self.session() as session:
-            result = (
-                session.query(db.ArtifactSet)
-                .filter(db.ArtifactSet.set_id == set_id)
-                .first()
-            )
+            result = session.query(db.ArtifactSet).filter(db.ArtifactSet.set_id == set_id).first()
 
         if result:
             return self._db_to_mem_set(result)
@@ -986,9 +942,7 @@ class PostgresRepo(ArtifactRepository):
         cs.ensure_delete(self, check_contains=False)
         with self.session() as session:
             num_deleted = (
-                session.query(db.ArtifactSet)
-                .filter(db.ArtifactSet.set_id == set_id)
-                .delete()
+                session.query(db.ArtifactSet).filter(db.ArtifactSet.set_id == set_id).delete()
             )
             (
                 session.query(db.ArtifactSetMember)
@@ -1043,9 +997,7 @@ class ChainedRepo(ArtifactRepository):
         return cs.chained_put(self, record.id, record, put=_put_only_value)
 
     def put_set(self, artifact_set, read_through=False):
-        return cs.chained_put(
-            self, None, artifact_set, contains=_contains_set, put=_put_set
-        )
+        return cs.chained_put(self, None, artifact_set, contains=_contains_set, put=_put_set)
 
     def get_by_id(self, artifact_id):
         def get(store, id):
@@ -1104,10 +1056,10 @@ set_union = t.partial(_set_op, ops.or_)
 set_difference = t.partial(_set_op, ops.sub)
 set_intersection = t.partial(_set_op, ops.and_)
 
-artifact_set_properties = ["id", "artifact_ids", "created_at", "labels"]
+artifact_set_properties = ['id', 'artifact_ids', 'created_at', 'labels']
 
 
-class ArtifactSet(namedtuple("ArtifactSet", artifact_set_properties)):
+class ArtifactSet(namedtuple('ArtifactSet', artifact_set_properties)):
     def __new__(cls, artifact_ids, labels=None, created_at=None, id=None):
         artifact_ids = t.map(_artifact_id, artifact_ids)
         labels = _check_labels_name(labels)
@@ -1122,7 +1074,7 @@ class ArtifactSet(namedtuple("ArtifactSet", artifact_set_properties)):
     @property
     def name(self):
         if self.labels is not None:
-            return self.labels.get("name")
+            return self.labels.get('name')
 
     def __eq__(self, other):
         if isinstance(other, self.__class__):
@@ -1164,7 +1116,7 @@ class ArtifactSet(namedtuple("ArtifactSet", artifact_set_properties)):
         return self._replace(labels=labels)
 
     def rename(self, name):
-        return self.relabel({"name": name})
+        return self.relabel({'name': name})
 
     def put(self, repo=None):
         repo = repo if repo else get_default_repo()
@@ -1221,9 +1173,7 @@ def coerce_to_artifact(artifact_or_id, repo=None):
         return artifact_or_id
     if is_proxy(artifact_or_id):
         return artifact_or_id.artifact
-    raise ValueError(
-        "Was unable to coerce object into an Artifact: {}".format(artifact_or_id)
-    )
+    raise ValueError('Was unable to coerce object into an Artifact: {}'.format(artifact_or_id))
 
 
 def coerce_to_artifacts(artifact_or_ids, repo=None):
@@ -1278,8 +1228,8 @@ class lazy_dict:
         return (self[key] for key in self.thunks.keys())
 
     def __repr__(self):
-        return "lazy_dict({})".format(
-            t.merge(t.valmap(lambda _: "...", self.thunks), self.realized)
+        return 'lazy_dict({})'.format(
+            t.merge(t.valmap(lambda _: '...', self.thunks), self.realized)
         )
 
 
@@ -1299,9 +1249,7 @@ def lazy_proxy_dict(artifacts_or_ids, group_artifacts_of_same_name=False):
     """
     if isinstance(artifacts_or_ids, dict):
         artifacts = t.valmap(coerce_to_artifact, artifacts_or_ids)
-        lambdas = {
-            name: (lambda a: lambda: a.proxy())(a) for name, a in artifacts.items()
-        }
+        lambdas = {name: (lambda a: lambda: a.proxy())(a) for name, a in artifacts.items()}
         return lazy_dict(lambdas)
 
     # else we have a collection
@@ -1316,9 +1264,7 @@ def lazy_proxy_dict(artifacts_or_ids, group_artifacts_of_same_name=False):
         lambdas = t.merge(
             lambdas,
             {
-                name: (lambda artifacts: (lambda: [a.proxy() for a in artifacts]))(
-                    artifacts
-                )
+                name: (lambda artifacts: (lambda: [a.proxy() for a in artifacts]))(artifacts)
                 for name, artifacts in multi.items()
             },
         )

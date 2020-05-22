@@ -1,18 +1,19 @@
-import cloudpickle
 import io
-from ordered_set import OrderedSet
 import pickle
+
+import cloudpickle
+
 from . import repos as r
-from .compatibility import string_type
 
 Pickler = cloudpickle.CloudPickler
+
 
 class DependencyWalker(Pickler):
     def __init__(self):
         self.stream = io.BytesIO()
         self.dependents = []
         self.branches = []
-        protocol = (pickle.DEFAULT_PROTOCOL)
+        protocol = pickle.DEFAULT_PROTOCOL
         Pickler.__init__(self, self.stream, protocol=protocol)
 
     def save(self, obj):
