@@ -25,3 +25,5 @@ docs/build
 .vscode/
 .mypy_cache/
 
+htmlcov/
+artifacts/
