@@ -1,12 +1,11 @@
 from copy import copy, deepcopy
 
 import pytest
-import torch
 
 import provenance as p
 from provenance.hashing import hash
 
-pytest.importorskip('torch')
+torch = pytest.importorskip('torch')
 
 
 class TwoLayerNet(torch.nn.Module):
